@@ -12,7 +12,23 @@
   },
   "tauri": {
     "allowlist": {
-      "all": false
+      "all": false,
+      "fs": {
+        "all": true,
+        "readFile": true,
+        "writeFile": true,
+        "readDir": true,
+        "exists": true
+      },
+      "dialog": {
+        "all": true
+      },
+      "shell": {
+        "all": true,
+        "execute": true,
+        "sidecar": true,
+        "open": true
+      }
     },
     "bundle": {
       "active": true,
@@ -56,15 +72,10 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 600,
+        "height": 720,
         "resizable": true,
-        "title": "first-app-title",
-        "width": 800
-      },
-      {
-        "label": "local",
-        "title": "Tauri",
-        "url": "index.html"
+        "title": "VMware 管理器",
+        "width": 1280
       }
     ]
   }
