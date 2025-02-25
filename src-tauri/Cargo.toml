@@ -1,0 +1,32 @@
+[package]
+name = "app"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+license = ""
+repository = ""
+default-run = "app"
+edition = "2021"
+rust-version = "1.60"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "1.5.5", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "1.8.1", features = [] }
+#libopenmpt-sys = "0.3.0"
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
+# If you use cargo directly instead of tauri's cli you can use this feature flag to switch between tauri's `dev` and `build` modes.
+# DO NOT REMOVE!!
+custom-protocol = [ "tauri/custom-protocol" ]
+#panic = "abort" # Strip expensive panic clean-up logic 发布模式下发生panic直接终止程序 避免昂贵的清理逻辑
+#codegen-units = 1 # Compile crates one after another so the compiler can optimize better 
+#lto = true # Enables link to optimizations 启用链接优化，进一步减少二进制文件大小
+#opt-level = "s" # Optimize for binary size 优化二进制文件大小
+#strip = true # Remove debug symbols 移除调试符号，减小最终二进制文件的大小
