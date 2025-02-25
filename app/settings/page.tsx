@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { Button } from "@/components/ui/button"
 import { useVMwareStore } from '@/lib/store/vmware'

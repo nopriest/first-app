@@ -17,7 +17,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         console.error('StoreProvider: Failed to load hardware:', err)
       })
     }
-  }, [])
+  }, [loadFromDisk])
 
   return children
 } 

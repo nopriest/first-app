@@ -1,7 +1,5 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/tauri'
-import { debounce } from '@/lib/utils/debounce'
-import { listen } from '@tauri-apps/api/event'
 
 interface Hardware {
   id: string

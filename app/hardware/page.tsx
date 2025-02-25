@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { useVMwareStore } from '@/lib/store/vmware'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useRouter } from 'next/navigation'
 
 interface Hardware {
   id: string
@@ -39,13 +38,6 @@ interface NewHardware {
   name: string
   biosPath: string
   vmxPath: string
-}
-
-interface VirtualItem {
-  index: number
-  start: number
-  size: number
-  key: string | number
 }
 
 function LoadingSpinner() {
@@ -73,7 +65,6 @@ export default function HardwarePage() {
     biosPath: '',
     vmxPath: '',
   })
-  const parentRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [page, setPage] = useState(1)
   const itemsPerPage = 10
@@ -86,10 +77,8 @@ export default function HardwarePage() {
     [hardwares.length, itemsPerPage]
   )
   const [hardwareToDelete, setHardwareToDelete] = useState<string | null>(null)
-  const router = useRouter()
-  const initialized = useRef(false)
 
-  const scanHardware = async () => {
+  const scanHardware = useMemo(() => async () => {
     if (!vmwarePath) return
     
     try {
@@ -102,7 +91,7 @@ export default function HardwarePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [vmwarePath, addHardwares, setLoading, setError])
 
   const selectFile = async (type: 'bios' | 'vmx') => {
     try {
@@ -185,24 +174,19 @@ export default function HardwarePage() {
       console.error('Failed to load hardware data:', err);
       setError('加载硬件配置失败');
     });
-  }, []);
+  }, [loadFromDisk]);
 
   useEffect(() => {
-    if (vmwarePath && hardwares.length === 0 && !initialized.current) {
+    if (vmwarePath && hardwares.length === 0) {
       console.log('Scanning for default hardware...');
       scanHardware();
-      initialized.current = true;
     }
-  }, [vmwarePath, hardwares.length]);
+  }, [vmwarePath, hardwares.length, scanHardware]);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 100)
     return () => clearTimeout(timer)
   }, [])
-
-  const handleTabClick = useCallback((href: string) => {
-    router.push(href)
-  }, [router])
 
   if (isLoading) {
     return <LoadingSpinner />
