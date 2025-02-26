@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useVMwareStore } from '@/lib/store/vmware'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -173,8 +173,8 @@ export default function OperationsPage() {
     })
   )
 
-  // 获取所有VM状态
-  const refreshStatus = async () => {
+  // 将 refreshStatus 包装在 useCallback 中以避免重复创建
+  const refreshStatus = useCallback(async () => {
     try {
       setLoading(true)
       const runningVMs = await invoke<string[]>('list_running_vms')
@@ -192,7 +192,47 @@ export default function OperationsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [containers])
+
+  // 初始加载和页面可见性变化时的自动刷新
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    // 处理页面可见性变化
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // 页面变为可见时，立即刷新一次
+        refreshStatus();
+        // 然后开始定时刷新
+        intervalId = setInterval(refreshStatus, 10000);
+      } else {
+        // 页面不可见时，清除定时器
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      }
+    };
+
+    // 添加可见性变化监听器
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 初始加载时立即刷新一次
+    refreshStatus();
+    
+    // 如果页面当前可见，开始定时刷新
+    if (document.visibilityState === 'visible') {
+      intervalId = setInterval(refreshStatus, 10000);
+    }
+
+    // 清理函数
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [refreshStatus]); // 依赖于 refreshStatus
 
   // 批量操作函数
   const batchOperation = async (operation: 'start' | 'stop' | 'pause' | 'reset', containerId?: string) => {
@@ -261,10 +301,8 @@ export default function OperationsPage() {
     const { active, over } = event
     
     if (over && active.id !== over.id) {
-      const oldIndex = containers.findIndex(c => c.id === active.id)
-      const newIndex = containers.findIndex(c => c.id === over.id)
-      
-      reorderContainers(arrayMove(containers, oldIndex, newIndex))
+      // 直接传递 active.id 和 over.id 给 reorderContainers
+      reorderContainers(active.id as string, over.id as string)
     }
   }
 

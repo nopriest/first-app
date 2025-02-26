@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/tauri'
+import { arrayMove } from '@dnd-kit/sortable'
 
 interface Hardware {
   id: string
@@ -33,7 +34,7 @@ interface VMwareStore {
   saveToDisk: () => Promise<void>
   setContainers: (containers: Container[]) => void
   addContainers: (containers: Container[]) => void
-  reorderContainers: (newContainers: Container[]) => void
+  reorderContainers: (activeId: string, overId: string) => void
   originalBiosPath: string | null
   originalVmxPath: string | null
   setOriginalBiosPath: (path: string) => void
@@ -69,11 +70,7 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
 
   const saveContainersToFile = async (containers: Container[]) => {
     try {
-      if (containers.length === 0) {
-        console.log('Attempt to save empty container list, skipping...');
-        return;
-      }
-
+      // 移除空数组检查，因为我们需要保存所有状态变更
       console.log('Current containers before saving:', containers);
       await invoke('save_container_config', { containers });
       console.log('Container save completed');
@@ -240,8 +237,18 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
         saveContainersToFile(mergedContainers);
         return { containers: mergedContainers };
       }),
-    reorderContainers: (newContainers) => {
-      set({ containers: newContainers })
+    reorderContainers: (activeId: string, overId: string) => {
+      set((state) => {
+        const oldIndex = state.containers.findIndex((c) => c.id === activeId);
+        const newIndex = state.containers.findIndex((c) => c.id === overId);
+        
+        const newContainers = arrayMove(state.containers, oldIndex, newIndex);
+        
+        // 立即保存新的顺序到文件
+        saveContainersToFile(newContainers);
+        
+        return { containers: newContainers };
+      });
     },
     originalBiosPath: null,
     originalVmxPath: null,
