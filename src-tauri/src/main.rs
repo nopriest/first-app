@@ -10,6 +10,8 @@ use std::process::Command;
 use uuid;
 use winreg::enums::*;
 use winreg::RegKey;
+use serde_json::Value;
+use serde_json::json;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct VMXInfo {
@@ -52,6 +54,16 @@ fn get_container_config_path() -> PathBuf {
     config_dir
 }
 
+fn get_config_dir() -> Result<PathBuf, String> {
+    let mut config_dir = tauri::api::path::config_dir().unwrap_or_default();
+    config_dir.push("vmware-manager");
+    
+    // 确保目录存在
+    fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+    
+    Ok(config_dir)
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -68,6 +80,9 @@ fn main() {
             delete_container,
             list_running_vms,
             vm_operation,
+            save_settings_config,
+            load_settings_config,
+            validate_vmware_path,
         ])
         .on_window_event(|event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event.event() {
@@ -312,5 +327,44 @@ async fn vm_operation(operation: String, vmx_path: String) -> Result<(), String>
 
     cmd.output().map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[tauri::command]
+async fn save_settings_config(settings: Value) -> Result<(), String> {
+    let config_dir = get_config_dir()?;
+    let settings_path = config_dir.join("settings.json");
+    
+    fs::write(&settings_path, serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_settings_config() -> Result<Value, String> {
+    let config_dir = get_config_dir()?;
+    let settings_path = config_dir.join("settings.json");
+    
+    if !settings_path.exists() {
+        return Ok(json!({
+            "vmwarePath": null,
+            "originalBiosPath": null,
+            "originalVmxPath": null
+        }));
+    }
+    
+    let content = fs::read_to_string(&settings_path).map_err(|e| e.to_string())?;
+    let settings: Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    
+    Ok(settings)
+}
+
+#[tauri::command]
+async fn validate_vmware_path(path: String) -> Result<(), String> {
+    let vmrun_path = PathBuf::from(&path).join("vmrun.exe");
+    if !vmrun_path.exists() {
+        return Err("VMware 安装目录无效：未找到 vmrun.exe".to_string());
+    }
     Ok(())
 }

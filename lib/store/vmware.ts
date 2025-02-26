@@ -33,6 +33,11 @@ interface VMwareStore {
   saveToDisk: () => Promise<void>
   setContainers: (containers: Container[]) => void
   addContainers: (containers: Container[]) => void
+  reorderContainers: (newContainers: Container[]) => void
+  originalBiosPath: string | null
+  originalVmxPath: string | null
+  setOriginalBiosPath: (path: string) => void
+  setOriginalVmxPath: (path: string) => void
 }
 
 export const useVMwareStore = create<VMwareStore>()((set, get) => {
@@ -85,11 +90,31 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
     }
   };
 
+  const saveSettingsToFile = async (settings: { 
+    vmwarePath: string | null,
+    originalBiosPath: string | null,
+    originalVmxPath: string | null
+  }) => {
+    try {
+      await invoke('save_settings_config', { settings });
+      console.log('Settings saved successfully');
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    }
+  };
+
   return {
     vmwarePath: null,
     hardwares: [],
     containers: [],
-    setVMwarePath: (path) => set({ vmwarePath: path }),
+    setVMwarePath: (path) => {
+      set({ vmwarePath: path });
+      saveSettingsToFile({
+        vmwarePath: path,
+        originalBiosPath: get().originalBiosPath,
+        originalVmxPath: get().originalVmxPath
+      });
+    },
     addHardware: (hardware) =>
       set((state) => {
         const newHardwares = [...state.hardwares, hardware];
@@ -164,19 +189,37 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
         const containers = await invoke<Container[]>('load_container_config');
         console.log('Loaded containers:', containers);
         
+        // 加载设置
+        const settings = await invoke<{
+          vmwarePath: string | null,
+          originalBiosPath: string | null,
+          originalVmxPath: string | null
+        }>('load_settings_config');
+        
         // 更新状态
-        set({ hardwares, containers });
+        set({ 
+          hardwares, 
+          containers, 
+          vmwarePath: settings.vmwarePath,
+          originalBiosPath: settings.originalBiosPath,
+          originalVmxPath: settings.originalVmxPath
+        });
         console.log('State updated with loaded data');
       } catch (error) {
         console.error('Failed to load config:', error);
       }
     },
     saveToDisk: async () => {
-      const { hardwares, containers } = get();
+      const { hardwares, containers, vmwarePath, originalBiosPath, originalVmxPath } = get();
       console.log('Saving all data to disk...');
       await Promise.all([
         saveToFile(hardwares),
-        saveContainersToFile(containers)
+        saveContainersToFile(containers),
+        saveSettingsToFile({
+          vmwarePath,
+          originalBiosPath,
+          originalVmxPath
+        })
       ]);
     },
     setContainers: (containers) => {
@@ -197,5 +240,26 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
         saveContainersToFile(mergedContainers);
         return { containers: mergedContainers };
       }),
+    reorderContainers: (newContainers) => {
+      set({ containers: newContainers })
+    },
+    originalBiosPath: null,
+    originalVmxPath: null,
+    setOriginalBiosPath: (path) => {
+      set({ originalBiosPath: path });
+      saveSettingsToFile({
+        vmwarePath: get().vmwarePath,
+        originalBiosPath: path,
+        originalVmxPath: get().originalVmxPath
+      });
+    },
+    setOriginalVmxPath: (path) => {
+      set({ originalVmxPath: path });
+      saveSettingsToFile({
+        vmwarePath: get().vmwarePath,
+        originalBiosPath: get().originalBiosPath,
+        originalVmxPath: path
+      });
+    },
   }
 }) 
