@@ -254,7 +254,8 @@ export default function OperationsPage() {
         if (container) {
           await invoke('vm_operation', {
             operation,
-            vmxPath: container.vmx_path
+            vmxPath: container.vmx_path,
+            hardwareId: container.hardware_id  // 传递硬件配置ID
           })
         }
       } else {
@@ -265,7 +266,8 @@ export default function OperationsPage() {
   
           await invoke('vm_operation', {
             operation,
-            vmxPath: container.vmx_path
+            vmxPath: container.vmx_path,
+            hardwareId: container.hardware_id  // 传递硬件配置ID
           })
         }
       }

@@ -5,7 +5,7 @@ use chrono;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid;
 use winreg::enums::*;
@@ -116,7 +116,11 @@ fn get_vmware_path() -> Result<String, String> {
         .map_err(|e| e.to_string())?;
 
     let install_path: String = key.get_value("InstallPath").map_err(|e| e.to_string())?;
-
+    
+    // 确保路径以反斜杠结尾
+    if !install_path.ends_with('\\') {
+        return Ok(format!("{}\\", install_path));
+    }
     Ok(install_path)
 }
 
@@ -164,8 +168,8 @@ async fn scan_hardware_files(vmware_path: &str) -> Result<Vec<Hardware>, String>
 
     // 检查BIOS文件夹
     let bios_path = PathBuf::from(vmware_path).join("BIOS.440.ROM");
-    // 检查VMX可执行文件
-    let vmx_path = PathBuf::from(vmware_path).join("vmware-vmx.exe");
+    // 检查VMX可执行文件 - 修改为 x64 子目录
+    let vmx_path = PathBuf::from(vmware_path).join("x64").join("vmware-vmx.exe");
 
     if bios_path.exists() && vmx_path.exists() {
         hardware_list.push(Hardware {
@@ -318,10 +322,96 @@ async fn list_running_vms() -> Result<Vec<String>, String> {
         .collect())
 }
 
-#[tauri::command]
-async fn vm_operation(operation: String, vmx_path: String) -> Result<(), String> {
-    let mut cmd = Command::new("vmrun");
+// 备份和替换 vmware-vmx.exe
+async fn replace_vmx_file(vmware_path: &str, custom_vmx_path: &str) -> Result<(), String> {
+    println!("VMware path: {}", vmware_path);
+    println!("Custom VMX path: {}", custom_vmx_path);
 
+    // 修改为 x64 子目录下的路径
+    let vmx_path = PathBuf::from(vmware_path).join("x64").join("vmware-vmx.exe");
+    let backup_path = PathBuf::from(vmware_path).join("x64").join("vmware-vmx.exe.backup");
+
+    println!("VMX exe path: {:?}", vmx_path);
+    println!("Backup path: {:?}", backup_path);
+
+    // 确保 x64 目录存在
+    let x64_dir = PathBuf::from(vmware_path).join("x64");
+    if !x64_dir.exists() {
+        return Err(format!("x64 directory not found at: {:?}", x64_dir));
+    }
+
+    // 验证源文件存在
+    if !vmx_path.exists() {
+        return Err(format!("VMware-vmx.exe not found at: {:?}", vmx_path));
+    }
+
+    // 验证自定义文件存在
+    if !Path::new(custom_vmx_path).exists() {
+        return Err(format!("Custom VMX file not found at: {}", custom_vmx_path));
+    }
+
+    // 如果还没有备份，创建备份
+    if !backup_path.exists() {
+        println!("Creating backup of vmware-vmx.exe");
+        fs::copy(&vmx_path, &backup_path)
+            .map_err(|e| format!("Failed to backup vmware-vmx.exe: {} (from {:?} to {:?})", 
+                e, vmx_path, backup_path))?;
+    }
+
+    // 替换为自定义的 vmx 文件
+    println!("Replacing vmware-vmx.exe with custom file");
+    fs::copy(custom_vmx_path, &vmx_path)
+        .map_err(|e| format!("Failed to replace vmware-vmx.exe: {} (from {} to {:?})", 
+            e, custom_vmx_path, vmx_path))?;
+
+    println!("VMX file replacement completed successfully");
+    Ok(())
+}
+
+// 修改 restore_vmx_file 函数也使用 x64 子目录
+async fn restore_vmx_file(vmware_path: &str) -> Result<(), String> {
+    println!("Restoring vmware-vmx.exe from backup");
+    println!("VMware path: {}", vmware_path);
+
+    // 修改为 x64 子目录下的路径
+    let vmx_path = PathBuf::from(vmware_path).join("x64").join("vmware-vmx.exe");
+    let backup_path = PathBuf::from(vmware_path).join("x64").join("vmware-vmx.exe.backup");
+
+    println!("VMX exe path: {:?}", vmx_path);
+    println!("Backup path: {:?}", backup_path);
+
+    if !backup_path.exists() {
+        return Err(format!("Backup file not found at: {:?}", backup_path));
+    }
+
+    fs::copy(&backup_path, &vmx_path)
+        .map_err(|e| format!("Failed to restore vmware-vmx.exe: {} (from {:?} to {:?})", 
+            e, backup_path, vmx_path))?;
+
+    println!("VMX file restoration completed successfully");
+    Ok(())
+}
+
+// 修改 vm_operation 命令
+#[tauri::command]
+async fn vm_operation(operation: String, vmx_path: String, hardware_id: Option<String>) -> Result<(), String> {
+    // 从配置文件加载 VMware 路径
+    let settings = load_settings_config().await?;
+    let vmware_path = settings["vmwarePath"]
+        .as_str()
+        .ok_or("VMware path not configured")?;
+    
+    // 使用引用来避免移动 hardware_id
+    if let Some(ref hardware_id) = hardware_id {
+        // 从配置文件加载硬件配置
+        let hardwares: Vec<Hardware> = load_hardware_config().await?;
+        if let Some(hardware) = hardwares.iter().find(|h| h.id == *hardware_id) {
+            // 替换 vmx 文件
+            replace_vmx_file(vmware_path, &hardware.vmx_path).await?;
+        }
+    }
+
+    let mut cmd = Command::new("vmrun");
     match operation.as_str() {
         "start" => {
             cmd.arg("start").arg(&vmx_path).arg("gui");
@@ -339,6 +429,11 @@ async fn vm_operation(operation: String, vmx_path: String) -> Result<(), String>
     }
 
     cmd.output().map_err(|e| e.to_string())?;
+
+    // 现在可以继续使用 hardware_id，因为之前只是借用而不是移动
+    if hardware_id.is_some() {
+        restore_vmx_file(vmware_path).await?;
+    }
 
     Ok(())
 }
