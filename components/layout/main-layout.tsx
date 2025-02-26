@@ -23,7 +23,7 @@ const navigation = [
   },
   {
     name: "批量操作",
-    href: "/batch",
+    href: "/operations",
     icon: LayoutGrid
   },
   {

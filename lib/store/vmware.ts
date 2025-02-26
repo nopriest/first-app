@@ -14,6 +14,7 @@ interface Container {
   name: string
   vmx_path: string
   created_at: string
+  hardwareId: string | null
 }
 
 interface VMwareStore {
