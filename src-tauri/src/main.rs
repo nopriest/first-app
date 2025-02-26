@@ -35,6 +35,7 @@ struct Container {
     name: String,
     vmx_path: String,
     created_at: String,
+    hardware_id: Option<String>,
 }
 
 const CONFIG_FILENAME: &str = "hardware_config.json";
@@ -85,10 +86,21 @@ fn main() {
             validate_vmware_path,
         ])
         .on_window_event(|event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event.event() {
-                println!("Window close requested, saving config...");
-                // 窗口会等待所有 Promise 完成后再关闭
-                event.window().emit("save-before-close", ()).unwrap();
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event.event() {
+                // 阻止窗口立即关闭
+                api.prevent_close();
+                
+                let window = event.window().clone();
+                // 发送保存事件给前端
+                window.emit("save-before-close", ()).unwrap();
+                
+                // 克隆 window 用于闭包
+                let window_clone = window.clone();
+                // 等待前端回复后再关闭窗口
+                window.once("save-completed", move |_| {
+                    // 现在可以安全地关闭窗口
+                    window_clone.close().unwrap();
+                });
             }
         })
         .run(tauri::generate_context!())
@@ -254,6 +266,7 @@ async fn add_container(vmx_path: String, name: String) -> Result<Container, Stri
         name,
         vmx_path,
         created_at: chrono::Local::now().to_rfc3339(),
+        hardware_id: None,
     };
     Ok(container)
 }

@@ -15,7 +15,7 @@ interface Container {
   name: string
   vmx_path: string
   created_at: string
-  hardwareId: string | null
+  hardware_id: string | null
 }
 
 interface VMwareStore {
@@ -142,12 +142,14 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
         saveContainersToFile(newContainers);
         return { containers: newContainers };
       }),
-    updateContainer: (id, updates) =>
-      set((state) => ({
-        containers: state.containers.map((c) =>
-          c.id === id ? { ...c, ...updates } : c
-        ),
-      })),
+    updateContainer: (id: string, updates: Partial<Container>) => {
+      set((state) => {
+        const newContainers = state.containers.map(container =>
+          container.id === id ? { ...container, ...updates } : container
+        );
+        return { containers: newContainers };
+      });
+    },
     setHardwares: (hardwares) => {
       console.log('Setting hardwares:', hardwares);
       set({ hardwares });

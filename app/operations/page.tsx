@@ -35,7 +35,7 @@ interface Container {
   id: string
   name: string
   vmx_path: string
-  hardwareId?: string
+  hardware_id?: string
 }
 
 interface Hardware {
@@ -101,7 +101,7 @@ function SortableTableRow({
       <TableCell>{container.name}</TableCell>
       <TableCell>
         <Select
-          value={container.hardwareId || "none"}
+          value={container.hardware_id || "none"}
           onValueChange={(value) => handleHardwareChange(container.id, value)}
         >
           <SelectTrigger className="w-[200px]">
@@ -152,7 +152,7 @@ function SortableTableRow({
 }
 
 export default function OperationsPage() {
-  const { containers, hardwares, updateContainer, reorderContainers } = useVMwareStore()
+  const { containers, hardwares, updateContainer, reorderContainers, saveToDisk } = useVMwareStore()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedVMs, setSelectedVMs] = useState<string[]>([])
@@ -234,6 +234,14 @@ export default function OperationsPage() {
     };
   }, [refreshStatus]); // 依赖于 refreshStatus
 
+  // 添加页面卸载时的保存逻辑
+  useEffect(() => {
+    return () => {
+      // 页面卸载时保存状态
+      saveToDisk();
+    };
+  }, [saveToDisk]);
+
   // 批量操作函数
   const batchOperation = async (operation: 'start' | 'stop' | 'pause' | 'reset', containerId?: string) => {
     try {
@@ -278,17 +286,18 @@ export default function OperationsPage() {
     }
   }
 
-  // 处理硬件配置变更
+  // 处理硬件配置变更 - 移除立即保存逻辑
   const handleHardwareChange = async (containerId: string, hardwareId: string) => {
     try {
       setLoading(true)
       setError(null)
       
-      // 更新容器的硬件配置，如果选择了"none"则设置为null
-      await updateContainer(containerId, { 
-        hardwareId: hardwareId === "none" ? null : hardwareId 
-      })
+      const hardwareIdToSave = hardwareId === "none" ? null : hardwareId;
       
+      await updateContainer(containerId, { 
+        hardware_id: hardwareIdToSave  // 改为 hardware_id
+      });
+
     } catch (err) {
       setError(err as string)
     } finally {
@@ -382,7 +391,7 @@ export default function OperationsPage() {
                 <SortableTableRow
                   key={container.id}
                   container={container}
-                  hardware={hardwares.find(h => h.id === container.hardwareId)}
+                  hardware={hardwares.find(h => h.id === container.hardware_id)}
                   vmStatus={vmStatuses[container.id]}
                   loading={loading}
                   selectedVMs={selectedVMs}
