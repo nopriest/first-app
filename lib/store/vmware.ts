@@ -12,8 +12,8 @@ interface Hardware {
 interface Container {
   id: string
   name: string
-  vmxPath: string
-  hardwareId: string | null
+  vmx_path: string
+  created_at: string
 }
 
 interface VMwareStore {
@@ -30,6 +30,8 @@ interface VMwareStore {
   addHardwares: (hardwares: Hardware[]) => void
   loadFromDisk: () => Promise<void>
   saveToDisk: () => Promise<void>
+  setContainers: (containers: Container[]) => void
+  addContainers: (containers: Container[]) => void
 }
 
 export const useVMwareStore = create<VMwareStore>()((set, get) => {
@@ -59,6 +61,29 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
     }
   };
 
+  const saveContainersToFile = async (containers: Container[]) => {
+    try {
+      if (containers.length === 0) {
+        console.log('Attempt to save empty container list, skipping...');
+        return;
+      }
+
+      console.log('Current containers before saving:', containers);
+      await invoke('save_container_config', { containers });
+      console.log('Container save completed');
+      
+      const savedData = await invoke<Container[]>('load_container_config');
+      console.log('Verified saved containers:', savedData);
+
+      if (JSON.stringify(savedData) !== JSON.stringify(containers)) {
+        console.log('Container state mismatch detected, updating state');
+        set({ containers: savedData });
+      }
+    } catch (error) {
+      console.error('Failed to save container config:', error);
+    }
+  };
+
   return {
     vmwarePath: null,
     hardwares: [],
@@ -83,11 +108,17 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
         return { hardwares: newHardwares };
       }),
     addContainer: (container) =>
-      set((state) => ({ containers: [...state.containers, container] })),
+      set((state) => {
+        const newContainers = [...state.containers, container];
+        saveContainersToFile(newContainers);
+        return { containers: newContainers };
+      }),
     removeContainer: (id) =>
-      set((state) => ({
-        containers: state.containers.filter((c) => c.id !== id),
-      })),
+      set((state) => {
+        const newContainers = state.containers.filter((c) => c.id !== id);
+        saveContainersToFile(newContainers);
+        return { containers: newContainers };
+      }),
     updateContainer: (id, updates) =>
       set((state) => ({
         containers: state.containers.map((c) =>
@@ -123,19 +154,47 @@ export const useVMwareStore = create<VMwareStore>()((set, get) => {
       }),
     loadFromDisk: async () => {
       try {
-        console.log('Loading hardwares from disk...');
+        console.log('Loading data from disk...');
+        // 加载硬件配置
         const hardwares = await invoke<Hardware[]>('load_hardware_config');
         console.log('Loaded hardwares:', hardwares);
-        set({ hardwares });
-        console.log('State updated with loaded hardwares');
+        
+        // 加载容器配置
+        const containers = await invoke<Container[]>('load_container_config');
+        console.log('Loaded containers:', containers);
+        
+        // 更新状态
+        set({ hardwares, containers });
+        console.log('State updated with loaded data');
       } catch (error) {
-        console.error('Failed to load hardware config:', error);
+        console.error('Failed to load config:', error);
       }
     },
     saveToDisk: async () => {
-      const { hardwares } = get();
-      console.log('Saving to disk, current state:', hardwares);
-      await saveToFile(hardwares);
-    }
+      const { hardwares, containers } = get();
+      console.log('Saving all data to disk...');
+      await Promise.all([
+        saveToFile(hardwares),
+        saveContainersToFile(containers)
+      ]);
+    },
+    setContainers: (containers) => {
+      set({ containers });
+      saveContainersToFile(containers);
+    },
+    addContainers: (newContainers) =>
+      set((state) => {
+        const containerMap = new Map(
+          state.containers.map(c => [c.id, c])
+        );
+        
+        newContainers.forEach(c => {
+          containerMap.set(c.id, c);
+        });
+        
+        const mergedContainers = Array.from(containerMap.values());
+        saveContainersToFile(mergedContainers);
+        return { containers: mergedContainers };
+      }),
   }
 }) 

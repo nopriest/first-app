@@ -26,12 +26,28 @@ struct Hardware {
     created_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct Container {
+    id: String,
+    name: String,
+    vmx_path: String,
+    created_at: String,
+}
+
 const CONFIG_FILENAME: &str = "hardware_config.json";
+const CONTAINER_CONFIG_FILENAME: &str = "container_config.json";
 
 fn get_config_path() -> PathBuf {
     let mut config_dir = tauri::api::path::config_dir().unwrap_or_default();
     config_dir.push("vmware-manager");
     config_dir.push(CONFIG_FILENAME);
+    config_dir
+}
+
+fn get_container_config_path() -> PathBuf {
+    let mut config_dir = tauri::api::path::config_dir().unwrap_or_default();
+    config_dir.push("vmware-manager");
+    config_dir.push(CONTAINER_CONFIG_FILENAME);
     config_dir
 }
 
@@ -45,6 +61,10 @@ fn main() {
             delete_hardware,
             save_hardware_config,
             load_hardware_config,
+            add_container,
+            save_container_config,
+            load_container_config,
+            delete_container,
         ])
         .on_window_event(|event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event.event() {
@@ -209,4 +229,50 @@ async fn load_hardware_config() -> Result<Vec<Hardware>, String> {
     let hardwares = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     
     Ok(hardwares)
+}
+
+#[tauri::command]
+async fn add_container(vmx_path: String, name: String) -> Result<Container, String> {
+    let container = Container {
+        id: uuid::Uuid::new_v4().to_string(),
+        name,
+        vmx_path,
+        created_at: chrono::Local::now().to_rfc3339(),
+    };
+    Ok(container)
+}
+
+#[tauri::command]
+async fn save_container_config(containers: Vec<Container>) -> Result<(), String> {
+    let config_path = get_container_config_path();
+    
+    // 确保目录存在
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    
+    let json = serde_json::to_string_pretty(&containers)
+        .map_err(|e| e.to_string())?;
+    
+    fs::write(&config_path, json)
+        .map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_container_config() -> Result<Vec<Container>, String> {
+    let config_path = get_container_config_path();
+    match fs::read_to_string(&config_path) {
+        Ok(content) => {
+            serde_json::from_str(&content).map_err(|e| e.to_string())
+        }
+        Err(_) => Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
+async fn delete_container(id: &str) -> Result<(), String> {
+    println!("Deleting container with id: {}", id);
+    Ok(())
 }

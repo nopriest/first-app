@@ -120,6 +120,14 @@ export default function HardwarePage() {
     try {
       setLoading(true)
       setError(null)
+
+      // 检查名称是否已存在
+      const nameExists = hardwares.some(h => h.name === newHardware.name);
+      if (nameExists) {
+        setError('该配置名称已存在');
+        return;
+      }
+
       console.log('Adding hardware with:', newHardware)
       const hardware = await invoke<Hardware>('add_hardware', {
         ...newHardware
